@@ -16,7 +16,14 @@ public:
             other.height_ = 0;
             other.channels_ = 0;
         }
-    Image& operator =(Image&&) noexcept = default;
+    
+    Image& operator =(Image&& other) noexcept {
+        std::swap(width_, other.width_);
+        std::swap(height_, other.height_);
+        std::swap(channels_, other.channels_);
+        std::swap(data, other.data); 
+        return *this;
+    }
 
     Image(const Image&) = delete;
     Image& operator=(const Image&) = delete;
@@ -45,6 +52,11 @@ public:
     }
     const T& at(size_t x, size_t y, size_t c) const {
         return data.at((y * width_ + x) * channels_ + c);
+    }
+
+    std::span<T> row(size_t y) {
+        size_t row_start = y * width_ * channels_;
+        return std::span<T>(data.data() + row_start, width_ * channels_);
     }
 
 private: 
