@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <span>
 
 template <typename T> 
 class Image {
@@ -53,11 +54,13 @@ public:
     const T& at(size_t x, size_t y, size_t c) const {
         return data.at((y * width_ + x) * channels_ + c);
     }
-
+    // good way to work with rows in dwt
     std::span<T> row(size_t y) {
         size_t row_start = y * width_ * channels_;
         return std::span<T>(data.data() + row_start, width_ * channels_);
     }
+
+    // todo: transpose()
 
 private: 
     size_t width_, height_, channels_;
