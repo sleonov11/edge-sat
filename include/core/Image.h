@@ -54,6 +54,14 @@ public:
         return std::span<const T> (data.data(), data.size());
     }
 
+    T& operator() (size_t x, size_t y, size_t c) {
+        return data[(y*width_ + x) * channels_ + c];
+    }
+
+    const T& operator() (size_t x, size_t y, size_t c) const {
+        return data[(y*width_ + x) * channels_ + c];
+    }
+
     T& operator[](size_t idx) {return data[idx];}
     const T& operator[](size_t idx) const {return data[idx];}
 
