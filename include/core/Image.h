@@ -2,6 +2,8 @@
 
 #include <vector>
 #include <span>
+#include <algorithm>
+#include <cstddef>
 
 template <typename T> 
 class Image {
@@ -45,6 +47,13 @@ public:
     T* data() noexcept {return data.data();}
     const T* data() const noexcept {return data.data();}
     
+    std::span<T> span_data() noexcept {
+        return std::span<T> (data.data(), data.size());
+    }
+    std::span<const T> span_data() const noexcept {
+        return std::span<const T> (data.data(), data.size());
+    }
+
     T& operator[](size_t idx) {return data[idx];}
     const T& operator[](size_t idx) const {return data[idx];}
 
@@ -60,7 +69,41 @@ public:
         return std::span<T>(data.data() + row_start, width_ * channels_);
     }
 
-    // todo: transpose()
+    std::span<const T> row(size_t y) const {
+        size_t row_start = y * width_ * channels_;
+        return std::span<const T>(data.data() + row_start, width_ * channels_);
+    }
+
+    // it can make dwt faster (i believe in it);
+    Image transpose() const {
+        Image<T> result (height_, width_, channels_);
+        constexpr size_t BLOCK = 64;
+        const T* src = data();
+        T* dst = result.data();
+
+        for (size_t by = 0; by < height_; by += BLOCK) {
+            size_t max_y = std::min(by + BLOCK, height_);
+
+            for(size_t bx = 0; bx < width_; bx += BLOCK) {
+                size_t max_x = std::min(bx + BLOCK, width_);
+                
+                for (size_t y = by; y < max_y; ++y) {
+                    for(size_t x = bx; x < max_x; ++x) {
+                        size_t src_idx = (y * width_ + x) * channels_;
+                        size_t dst_idx = (x * height_ + y) * channels_;
+                        if (channels_ == 3) { // for rgb;
+                            dst[dst_idx] = src[src_idx];
+                            dst[dst_idx + 1] = src[src_idx + 1];
+                            dst[dst_idx + 2] = src[src_idx + 2];
+                        } else {
+                            for (size_t c = 0; c < channels_; ++c) {dst[dst_idx + c] = src[src_idx + c];}
+                        }
+                    }
+                }
+            }
+        }
+        return result;
+    }
 
 private: 
     size_t width_, height_, channels_;
