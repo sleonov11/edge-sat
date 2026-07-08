@@ -1,4 +1,5 @@
 #include "include/filters/GaussianFilter.h"
+#include <algorithm>
 
 GaussianFilter::GaussianFilter(float sigma, EdgeHandling border_mode) 
         : sigma_(sigma), border_mode_(border_mode) {build_kernel();} 
@@ -20,6 +21,7 @@ void GaussianFilter::build_kernel() {
     for (float& v : kernel_) v /= sum;    
 }
 
+/*
 template <typename U> // its very bad...
 U GaussianFilter::getPixel (const Image<U>& img, int x, int y, int c) const {
     int w = static_cast<int> (img.width());
@@ -39,9 +41,9 @@ U GaussianFilter::getPixel (const Image<U>& img, int x, int y, int c) const {
 
     return img(static_cast<size_t>(x), static_cast<size_t>(y),static_cast<size_t>(c));
 }
+*/
 
-template <typename U> // the way to enfast operations
-Image<U> mirror_pad (const Image<U>& src, int radius) {
+Image<float> mirror_pad (const Image<float>& src, int radius) {
     size_t w = src.width();
     size_t h = src.height();
     size_t ch = src.channels();
@@ -49,7 +51,7 @@ Image<U> mirror_pad (const Image<U>& src, int radius) {
     size_t padded_w = w + 2 * radius;
     size_t padded_h = h + 2 * radius;
 
-    Image<U> dst (padded_w, padded_h, ch);
+    Image<float> dst (padded_w, padded_h, ch);
     
     for (size_t py = 0 ; py < padded_h; ++py) {
         for (size_t px = 0; px < padded_w; ++px) {
@@ -70,13 +72,12 @@ Image<U> mirror_pad (const Image<U>& src, int radius) {
     return dst;
 }
 
-template <typename U>
-void GaussianFilter::convolveHorizontal(const Image<U>& src, Image<float>& dst) const {
+void GaussianFilter::convolveHorizontal(const Image<float>& src, Image<float>& dst) const {
     size_t w = src.width();
     size_t h = src.height();
     size_t ch = src.channels();
 
-    Image<U> padd = mirror_pad(src, radius_);
+    Image<float> padd = mirror_pad(src, radius_);
 
     for (size_t y = 0; y < h; ++y) {
         for (size_t c = 0; c < ch; ++c) {
@@ -92,4 +93,56 @@ void GaussianFilter::convolveHorizontal(const Image<U>& src, Image<float>& dst) 
             }
         }
     }
+}
+
+void GaussianFilter::convolveVertical(const Image<float>& src, Image<float>& dst) const {
+    size_t w = src.width();
+    size_t h = src.height();
+    size_t ch = src.channels();
+
+    Image<float> padd = mirror_pad(src, radius_);
+
+    for (size_t x = 0; x < w; ++x) {
+        for (size_t c = 0; c < ch; ++c) {
+            for (size_t y = 0; y < h; ++y) {
+                float sum = 0;
+                for (int dy = -radius_; dy <= radius_; ++dy) {
+                    size_t px = static_cast<size_t> (static_cast<int>(x) + radius_);
+                    size_t py = static_cast<size_t> (static_cast<int>(y) + dy + radius_);
+                    float pixel = static_cast<float>(padd(px, py, c));
+                    sum += pixel * kernel_[dy + radius_];
+                }
+                dst(x,y,c) = sum;
+            }
+        }
+    }
+}
+
+template <typename U>
+Image<float> castToFloat(const Image<U>& src) {
+    Image<float> dst(src.width(), src.height(), src.channels());
+    for (size_t i = 0; i < src.size(); ++i) {
+        dst[i] = static_cast<float>(src[i]);
+    }
+    return dst;
+}
+
+template <typename U>
+Image<U> GaussianFilter::apply(const Image<U>& src) const {
+    size_t w = src.width(), h = src.height(), ch = src.channels();
+
+    Image <float> floatSrc = castToFloat(src);
+
+    Image<float> temp (w,h,ch);
+    convolveHorizontal(floatSrc, temp);
+
+    Image<float> tempV (w,h,ch);
+    convolveVertical(temp, tempV);
+
+    Image<U> result (w,h,ch);
+    for (size_t i = 0; i < result.size(); ++i) {
+        result[i] = static_cast<U>(std::clamp(tempV[i], 0.0f, 255.0f));    
+    }
+
+    return result;
 }

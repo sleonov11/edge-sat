@@ -32,11 +32,9 @@ private:
     template <typename U>
     U getPixel(const Image<U>& img, int x, int y, int c) const;
 
-    template <typename U>
-    void convolveHorizontal(const Image<U>& src, Image<float>& dst) const;
+    void convolveHorizontal(const Image<float>& src, Image<float>& dst) const;
 
-    template <typename U>
-    void convolveVertical(const Image<float>& src, Image<U>& dst) const;
+    void convolveVertical(const Image<float>& src, Image<float>& dst) const;
 };
 
 

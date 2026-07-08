@@ -1,7 +1,0 @@
-{
-	"InstallScripts" : 
-	[
-		"/home/stepan/Projects/edge-sat/build/cmake_install.cmake"
-	],
-	"Parallel" : false
-}
