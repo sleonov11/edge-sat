@@ -1,0 +1,3 @@
+/home/stepan/Projects/edge-sat/build/CMakeFiles/test_gaussian.dir
+/home/stepan/Projects/edge-sat/build/CMakeFiles/edit_cache.dir
+/home/stepan/Projects/edge-sat/build/CMakeFiles/rebuild_cache.dir
