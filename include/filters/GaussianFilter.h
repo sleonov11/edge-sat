@@ -21,6 +21,7 @@ public:
     float sigma() const {return sigma_;}
     int radius() const {return radius_;}
     EdgeHandling border_mode() const {return border_mode_;}
+    const std::vector<float>& kernel() const { return kernel_; }
 private:
     float sigma_;
     std::vector<float> kernel_;
