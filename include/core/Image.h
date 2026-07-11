@@ -113,6 +113,21 @@ public:
         return result;
     }
 
+    template <typename T>
+    Image<T> scaleToGray (Image<T>& src) {
+        size_t w = src.widht(), h = src.height();
+        Image<T> gray(src.widht(), src.height(), 1);
+        for (size_t y = 0; y < h; ++y) {
+            for (size_t x = 0; x < w; ++x) {
+                T r = src(x,y,0);
+                T g = src(x,y,1);
+                T b = src(x,y,2);
+                gray(x,y,0) = static_cast<T> (0.299 * r + 0.587 * g + 0.114 * b);
+            }
+        }
+        return gray;
+    }
+
 private: 
     size_t width_, height_, channels_;
     std::vector<T> data_;
