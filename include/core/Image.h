@@ -31,10 +31,10 @@ public:
     Image(const Image&) = delete;
     Image& operator=(const Image&) = delete;
     
-    size_t width() const noexcept {return width_;}
-    size_t height() const noexcept {return height_;}
-    size_t channels() const noexcept {return channels_;}
-    size_t size() const noexcept {return data_.size();}
+    constexpr size_t width() const noexcept {return width_;}
+    constexpr size_t height() const noexcept {return height_;}
+    constexpr size_t channels() const noexcept {return channels_;}
+    constexpr size_t size() const noexcept {return data_.size();}
     bool empty() const noexcept {return data_.empty();}
 
     void reset() noexcept {
@@ -56,11 +56,11 @@ public:
 
     T& operator() (size_t x, size_t y, size_t c) {
         return data_[(y*width_ + x) * channels_ + c];
-    }
+    } // not for prod;
 
     const T& operator() (size_t x, size_t y, size_t c) const {
         return data_[(y*width_ + x) * channels_ + c];
-    }
+    } 
 
     T& operator[](size_t idx) {return data_[idx];}
     const T& operator[](size_t idx) const {return data_[idx];}
@@ -114,9 +114,9 @@ public:
     }
 
     template <typename T>
-    Image<T> scaleToGray (Image<T>& src) {
-        size_t w = src.widht(), h = src.height();
-        Image<T> gray(src.widht(), src.height(), 1);
+    Image<T> scaleToGray (const Image<T>& src) const {
+        size_t w = src.width(), h = src.height();
+        Image<T> gray(src.width(), src.height(), 1);
         for (size_t y = 0; y < h; ++y) {
             for (size_t x = 0; x < w; ++x) {
                 T r = src(x,y,0);
