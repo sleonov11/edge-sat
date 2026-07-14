@@ -16,15 +16,14 @@ public:
         
         std::ifstream f(intercept_file);
         f >> intercept_;
-        validateSizes();
+        f.close();
     }
 
     inline void load(const std::vector<float>& weights, const std::vector<float>& mean,const std::vector<float>& std,const float intercept){
         weights_ = weights;
         mean_ = mean;
         std_ = std;
-        intercept_ = intercept_;
-        validateSizes();
+        intercept_ = intercept;
     }
 
     inline float predict_proba (const std::vector<float>& features) const {
@@ -36,7 +35,7 @@ public:
         return 1.0f / (1.0f + std::exp(-linear));
     }
         
-    inline bool predict (std::vector<float> features, float thresfold = 0.5f) {
+    inline bool predict (const std::vector<float> features, float thresfold = 0.5f) const {
         return predict_proba(features) >= thresfold;
     }
 
@@ -45,4 +44,21 @@ private:
     std::vector<float> mean_;
     std::vector<float> std_;
     float intercept_ = 0.0f;
+
+    inline std::vector<float> readVector(const std::sting& file_name) {
+        std::vector<float> res;
+        std::ifstream file(file_name);
+        std::string line;
+        while (std::getline(file, line)) {
+            if (line.empty()) continue;
+            std::stringstreamss(line);
+            float val;
+            while (line >> val) {
+                res.push_back(val);
+                if (ss.peek() == ',') ss.ignore();
+            }
+        }
+        file.close();
+        return res;
+    }
 };
