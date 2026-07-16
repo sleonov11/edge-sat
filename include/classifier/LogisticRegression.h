@@ -7,12 +7,12 @@
 
 class LogisticRegression {
 public:
-    static constexpr nFEATURES = 16;
+    static constexpr size_t nFEATURES = 16;
 
     inline void load(const std::string& weights_file,const std::string& mean_file,const std::string& std_file,const std::string& intercept_file) {
         weights_ = readVector(weights_file);
         mean_ = readVector(mean_file);
-        std_ = readVector(srd_file);
+        std_ = readVector(std_file);
         
         std::ifstream f(intercept_file);
         f >> intercept_;
@@ -35,7 +35,7 @@ public:
         return 1.0f / (1.0f + std::exp(-linear));
     }
         
-    inline bool predict (const std::vector<float> features, float thresfold = 0.5f) const {
+    inline bool predict (const std::vector<float>& features, float thresfold = 0.5f) const {
         return predict_proba(features) >= thresfold;
     }
 
@@ -45,15 +45,15 @@ private:
     std::vector<float> std_;
     float intercept_ = 0.0f;
 
-    inline std::vector<float> readVector(const std::sting& file_name) {
+    inline std::vector<float> readVector(const std::string& file_name) {
         std::vector<float> res;
         std::ifstream file(file_name);
         std::string line;
         while (std::getline(file, line)) {
             if (line.empty()) continue;
-            std::stringstreamss(line);
+            std::stringstream ss(line);
             float val;
-            while (line >> val) {
+            while (ss >> val) {
                 res.push_back(val);
                 if (ss.peek() == ',') ss.ignore();
             }
