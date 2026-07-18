@@ -113,15 +113,13 @@ public:
         return result;
     }
 
-    template <typename T>
-    Image<T> scaleToGray (const Image<T>& src) const {
-        size_t w = src.width(), h = src.height();
-        Image<T> gray(src.width(), src.height(), 1);
-        for (size_t y = 0; y < h; ++y) {
-            for (size_t x = 0; x < w; ++x) {
-                T r = src(x,y,0);
-                T g = src(x,y,1);
-                T b = src(x,y,2);
+    Image<T> scaleToGray () const {
+        Image<T> gray(width_, height_, 1);
+        for (size_t y = 0; y < height_; ++y) {
+            for (size_t x = 0; x < width_; ++x) {
+                T r = (*this)(x,y,0);
+                T g = (*this)(x,y,1);
+                T b = (*this)(x,y,2);
                 gray(x,y,0) = static_cast<T> (0.299 * r + 0.587 * g + 0.114 * b);
             }
         }
