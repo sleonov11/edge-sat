@@ -127,6 +127,8 @@ public:
     }
 
 private: 
-    size_t width_, height_, channels_;
+    size_t width_;
+    size_t height_;
+    size_t channels_;
     std::vector<T> data_;
 };
