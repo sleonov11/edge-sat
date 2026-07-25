@@ -35,7 +35,7 @@ void dwt_2d (Image<T>& img) {
 }
 
 template <typename T>
-Image<T> extract_subband (const Image<T>& src, size_t x0, size_t y0, size_t w, size_t h) {
+Image<T> extract_subband (Image<T>& src, size_t x0, size_t y0, size_t w, size_t h) {
     Image<T> sub (w, h, 1);
     for (size_t y = 0; y < h; ++y) {
         for (size_t x = 0; x < w; ++x) {
@@ -46,7 +46,7 @@ Image<T> extract_subband (const Image<T>& src, size_t x0, size_t y0, size_t w, s
 }
 
 template <typename T>
-FeatureStats compute_stats (const Image<T>& subband) {
+FeatureStats compute_stats (Image<T>& subband) {
     size_t N = subband.size();
     double sum = 0, sumSq = 0, sumLog = 0;
 
@@ -63,18 +63,17 @@ FeatureStats compute_stats (const Image<T>& subband) {
 }
 
 template <typename T>
-std::vector<float> extract_features(const Image<T>& src) {
-    Image<T> copy = src.scaleToGray();
+std::vector<float> extract_features(Image<T>& src) {
 
-    dwt_2d(copy);
+    dwt_2d(src);
 
-    size_t w = copy.width() / 2;
-    size_t h = copy.height() / 2;
+    size_t w = src.width() / 2;
+    size_t h = src.height() / 2;
 
-    auto LL = extract_subband (copy, 0, 0, w, h);
-    auto LH = extract_subband (copy, w, 0, w, h);
-    auto HL = extract_subband (copy, 0, h, w, h);
-    auto HH = extract_subband (copy, w, h, w, h);
+    auto LL = extract_subband (src, 0, 0, w, h);
+    auto LH = extract_subband (src, w, 0, w, h);
+    auto HL = extract_subband (src, 0, h, w, h);
+    auto HH = extract_subband (src, w, h, w, h);
 
     auto sLL = compute_stats(LL);
     auto sLH = compute_stats(LH);

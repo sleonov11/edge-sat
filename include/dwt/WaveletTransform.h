@@ -20,13 +20,13 @@ template <typename T>
 void dwt_2d (Image<T>& src);
 
 template <typename T>
-std::vector<float> extract_features(const Image<T>& src);
+std::vector<float> extract_features(Image<T>& src);
 
 
 template <typename T>
-Image<T> extract_subband (const Image<T>& src, size_t x0, size_t y0, size_t w, size_t h);
+Image<T> extract_subband (Image<T>& src, size_t x0, size_t y0, size_t w, size_t h);
 
 template <typename T>
-FeatureStats compute_stats (const Image<T>& subband);
+FeatureStats compute_stats (Image<T>& subband);
 
 #include "WaveletTransform.inl"

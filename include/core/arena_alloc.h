@@ -1,3 +1,5 @@
+#pragma once
+
 #include <cstddef>
 #include <new>
 #include <cstdint>
@@ -7,7 +9,6 @@ private:
     size_t size_;
     uint8_t* start_;
     uint8_t* current_;
-
 public:
     explicit Arena (size_t size) : start_(new (std::nothrow) uint8_t[size]), size_(size), current_(start_) {
         if (start_ == nullptr) {
