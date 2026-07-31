@@ -1,6 +1,7 @@
 #pragma once
 
 #include "TileView.h"
+#include <algorithm>
 
 class TileGenerator {
 public:
