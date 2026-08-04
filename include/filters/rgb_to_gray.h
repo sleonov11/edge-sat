@@ -3,7 +3,7 @@
 #include "core/TileView.h"
 
 template <int TILE>
-void rgb_to_gray (const ImageView& view, float* __restrict gray) {
+void rgb_to_gray (const TileView& view, float* __restrict gray) {
     // view - rgb тайл из ориг изображения
     // gray - выход, буффер TILE * TILE float; 
 

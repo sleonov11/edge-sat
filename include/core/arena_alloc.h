@@ -18,7 +18,7 @@ public:
     } 
     Arena(const Arena&) = delete;
     Arena& operator= (const Arena&) = delete;
-    Arena& operator (Arena&&) = delete;
+    Arena& operator= (Arena&&) = delete;
     Arena(Arena&&) = delete;
     ~Arena() {delete[] start_;}
 
