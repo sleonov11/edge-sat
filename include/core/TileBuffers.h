@@ -9,7 +9,7 @@ struct TileBuffers {
 
     alignas(64) float gray [TILE * TILE]; // для чб
     alignas(64) float padded[PADDED * PADDED]; // для миррор пад, чтобы не вылезать за рамки.
-    alignas(64) float gauss_h [TILE * PADDED]; // для гаусса горизонт.
+    alignas(64) float gauss_h [PADDED * PADDED]; // для гаусса горизонт.
     alignas(64) float gauss_v [TILE * TILE]; //  для гаусса верт.
     alignas(64) float dwt_buf [TILE * TILE]; // двт на месте
     alignas(64) float dwt_tmp [TILE * TILE]; // двт транспонирование.

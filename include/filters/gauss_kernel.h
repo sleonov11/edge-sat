@@ -1,4 +1,5 @@
 #pragma once
+#include <cmath>
 
 template <int RADIUS>
 struct GaussKernel {
@@ -9,7 +10,7 @@ struct GaussKernel {
         float sum = 0;
         for (int i = 0; i < SIZE; ++i) {
             int d = i - RADIUS;
-            k[i] = std::exp(-(d*d) / (2.0f * sigma * sigma)); // c++20 constexpr
+            k[i] = std::exp(-(d*d) / (2.0f * sigma * sigma)); // c++26 constexpr
             sum += k[i];
         }
         for (int i = 0; i < SIZE; ++i) k[i] /= sum;
