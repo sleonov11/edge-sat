@@ -1,84 +1,38 @@
+// benchmark_tile_profile.cpp
 #include "core/Image.h"
-#include "core/TileGenerator.h"
 #include "core/TileBuffers.h"
-#include "filters/rgb_to_gray.h"
-#include "filters/mirror_pad.h"
-#include "filters/gauss_tile.h"
-#include "dwt/dwt_tile.h"
 #include "filters/gauss_kernel.h"
+#include "filters/gauss_tile.h"
+#include "filters/mirror_pad.h"
+#include "dwt/dwt_tile.h"
+#include "dwt/dwt_features.h"
+#include "core/TileView.h"
 
 #include <iostream>
 #include <iomanip>
 #include <chrono>
-#include <vector>
-#include <numeric>
 #include <random>
+#include <omp.h>
 #include <algorithm>
 #include <array>
-#include <cstring>
-#include <cmath>
 
 using namespace std::chrono;
 
-// ---------- Вспомогательные структуры и функции для статистик ----------
-template<int SIZE>
-struct FeatureStats {
-    float mean, variance, energy, entropy;
-};
-
-template<int SIZE>
-FeatureStats<SIZE> compute_stats_subband(const float* data) {
-    constexpr int N = SIZE * SIZE;
-    double sum = 0.0, sum_sq = 0.0;
-    for (int i = 0; i < N; ++i) {
-        double v = data[i];
-        sum += v;
-        sum_sq += v * v;
-    }
-    double mean = sum / N;
-    double variance = sum_sq / N - mean * mean;
-    double energy = sum_sq;
-    double entropy = std::log(energy + 1e-12);
-    return {static_cast<float>(mean),
-            static_cast<float>(variance),
-            static_cast<float>(energy),
-            static_cast<float>(entropy)};
-}
-
-template<int TILE>
-std::array<float, 16> extract_features_from_dwt(const float* dwt_buf) {
-    constexpr int HALF = TILE / 2;
-    const float* ll = dwt_buf;
-    const float* lh = dwt_buf + HALF;
-    const float* hl = dwt_buf + HALF * TILE;
-    const float* hh = dwt_buf + HALF * TILE + HALF;
-
-    auto s_ll = compute_stats_subband<HALF>(ll);
-    auto s_lh = compute_stats_subband<HALF>(lh);
-    auto s_hl = compute_stats_subband<HALF>(hl);
-    auto s_hh = compute_stats_subband<HALF>(hh);
-
-    return {
-        s_ll.mean, s_ll.variance, s_ll.energy, s_ll.entropy,
-        s_lh.mean, s_lh.variance, s_lh.energy, s_lh.entropy,
-        s_hl.mean, s_hl.variance, s_hl.energy, s_hl.entropy,
-        s_hh.mean, s_hh.variance, s_hh.energy, s_hh.entropy
-    };
-}
-
-// ---------- Генерация случайного RGB-изображения ----------
-Image<uint8_t> generateRandomImage(size_t w, size_t h, size_t ch = 3) {
-    Image<uint8_t> img(w, h, ch);
+// ---------- Генерация случайного RGB 128x128 ----------
+void generateRandomTileRGB(uint8_t* data, int stride) {
     std::random_device rd;
     std::mt19937 gen(rd());
     std::uniform_int_distribution<int> dist(0, 255);
-    for (size_t i = 0; i < img.size(); ++i) {
-        img[i] = static_cast<uint8_t>(dist(gen));
+    for (int y = 0; y < 128; ++y) {
+        for (int x = 0; x < 128; ++x) {
+            data[y * stride + 3*x + 0] = dist(gen);
+            data[y * stride + 3*x + 1] = dist(gen);
+            data[y * stride + 3*x + 2] = dist(gen);
+        }
     }
-    return img;
 }
 
-// ---------- Измерение времени ----------
+// ---------- Замер времени (усреднение) ----------
 template <typename Func>
 double measureMs(Func&& func, int repeats = 10000) {
     auto start = steady_clock::now();
@@ -86,116 +40,107 @@ double measureMs(Func&& func, int repeats = 10000) {
         func();
     }
     auto end = steady_clock::now();
-    return duration<double, std::milli>(end - start).count();
+    return duration<double, std::milli>(end - start).count() / repeats;
 }
 
-// ---------- Главная ----------
 int main() {
     constexpr int TILE = 128;
     constexpr float SIGMA = 1.5f;
+    constexpr int REPEATS = 10000;
 
-    // 1. Генерируем изображение и берём первый тайл
-    Image<uint8_t> rgb = generateRandomImage(3840, 2160, 3);
-    Image<uint8_t> gray = rgb.scaleToGray();
+    // Подготовка данных
+    alignas(64) uint8_t rgb_data[TILE * TILE * 3];
+    generateRandomTileRGB(rgb_data, TILE * 3);
 
-    TileGenerator gen(gray.data(), gray.width() * sizeof(uint8_t),
-                      static_cast<int>(gray.width()),
-                      static_cast<int>(gray.height()),
-                      TILE, TILE, 16);
-    TileView view;
-    if (!gen.next(view)) {
-        std::cerr << "No tiles!\n";
-        return 1;
-    }
-
-    // 2. Буферы (один раз)
+    TileView view(rgb_data, TILE * 3, 0, 0, TILE, TILE, 3);
     TileBuffers<TILE> buf;
     GaussKernel<2> kernel(SIGMA);
 
-    const int REPEATS = 10000;
+    std::cout << std::fixed << std::setprecision(6);
+    std::cout << "=== Детальный профиль для одного тайла " << TILE << "×" << TILE << " ===\n";
+    std::cout << "Количество итераций: " << REPEATS << " (усреднение)\n\n";
 
-    std::cout << std::fixed << std::setprecision(3);
-    std::cout << "Fine-grained benchmark for one " << TILE << "x" << TILE << " tile\n";
-    std::cout << "Repeats: " << REPEATS << "\n\n";
-
-    // ----- 1) rgb_to_gray -----
-    double t1 = measureMs([&]() {
-        rgb_to_gray<TILE>(view, buf.gray);
+    // 1) RGB->Gray (копирование grayscale из view в buf.gray)
+    double t_gray = measureMs([&]() {
+        for (int y = 0; y < view.h; ++y) {
+            const uint8_t* src = view.row(y, 0);
+            float* dst = buf.gray + y * TILE;
+            for (int x = 0; x < view.w; ++x) {
+                dst[x] = static_cast<float>(src[x]);
+            }
+        }
     }, REPEATS);
-    std::cout << "rgb_to_gray:       " << t1 << " ms\n";
 
-    // ----- 2) mirror_pad -----
-    double t2 = measureMs([&]() {
+    // 2) mirror_pad
+    double t_pad = measureMs([&]() {
         mirror_pad<TILE, 2>(buf.gray, buf.padded);
     }, REPEATS);
-    std::cout << "mirror_pad:        " << t2 << " ms\n";
 
-    // ----- 3) gauss_h -----
-    double t3 = measureMs([&]() {
+    // 3) gauss_h
+    double t_h = measureMs([&]() {
         gauss_h_tile<TILE, 2>(buf.padded, buf.gauss_h, kernel.k);
     }, REPEATS);
-    std::cout << "gauss_h:           " << t3 << " ms\n";
 
-    // ----- 4) gauss_v -----
-    double t4 = measureMs([&]() {
+    // 4) gauss_v
+    double t_v = measureMs([&]() {
         gauss_v_tile<TILE, 2>(buf.gauss_h, buf.gauss_v, kernel.k);
     }, REPEATS);
-    std::cout << "gauss_v:           " << t4 << " ms\n";
 
-    // ----- 5) std::copy (gauss_v → dwt_buf) -----
-    double t5 = measureMs([&]() {
+    // 5) copy to dwt_buf
+    double t_copy = measureMs([&]() {
         std::copy(buf.gauss_v, buf.gauss_v + TILE * TILE, buf.dwt_buf);
     }, REPEATS);
-    std::cout << "std::copy:         " << t5 << " ms\n";
 
-    // ----- 6) dwt_2d_haar (in-place) -----
-    // Замеряем вместе с копированием внутрь, чтобы не искажать
-    double t6 = measureMs([&]() {
+    // 6) DWT (полностью)
+    double t_dwt = measureMs([&]() {
         std::copy(buf.gauss_v, buf.gauss_v + TILE * TILE, buf.dwt_buf);
         dwt_2d_haar<TILE>(buf.dwt_buf, buf.dwt_tmp);
     }, REPEATS);
-    double t6_clean = t6 - t5;  // вычитаем время копирования
-    std::cout << "dwt_2d_haar (incl copy): " << t6 << " ms\n";
-    std::cout << "dwt_2d_haar (clean):     " << t6_clean << " ms\n";
+    double t_dwt_clean = t_dwt - t_copy; // вычитаем копирование
 
-    // ----- 7) extract_features_from_dwt -----
-    // Выполняем один раз dwt, чтобы подготовить данные
+    // 7) Извлечение признаков (после выполнения DWT один раз)
     std::copy(buf.gauss_v, buf.gauss_v + TILE * TILE, buf.dwt_buf);
     dwt_2d_haar<TILE>(buf.dwt_buf, buf.dwt_tmp);
-    double t7 = measureMs([&]() {
-        std::array<float, 16> features = extract_features_from_dwt<TILE>(buf.dwt_buf);
+    double t_features = measureMs([&]() {
+        std::array<float, 16> features = extract_features_from_dwt_optimized<TILE>(buf.dwt_buf);
         volatile float dummy = features[0];
         (void)dummy;
     }, REPEATS);
-    std::cout << "extract_features:  " << t7 << " ms\n";
 
-    // ----- Суммарное время (sum of parts) -----
-    double total_measured = t1 + t2 + t3 + t4 + t5 + t6_clean + t7;
-    std::cout << "\nTotal (sum of parts): " << total_measured << " ms\n";
-
-    // ----- Замер всего пайплайна целиком (без промежуточных копий) -----
-    double total_full = measureMs([&]() {
-        rgb_to_gray<TILE>(view, buf.gray);
+    // 8) Полный пайплайн (для проверки суммы)
+    double t_full = measureMs([&]() {
+        for (int y = 0; y < view.h; ++y) {
+            const uint8_t* src = view.row(y, 0);
+            float* dst = buf.gray + y * TILE;
+            for (int x = 0; x < view.w; ++x) dst[x] = src[x];
+        }
         mirror_pad<TILE, 2>(buf.gray, buf.padded);
         gauss_h_tile<TILE, 2>(buf.padded, buf.gauss_h, kernel.k);
         gauss_v_tile<TILE, 2>(buf.gauss_h, buf.gauss_v, kernel.k);
         std::copy(buf.gauss_v, buf.gauss_v + TILE * TILE, buf.dwt_buf);
         dwt_2d_haar<TILE>(buf.dwt_buf, buf.dwt_tmp);
-        std::array<float, 16> features = extract_features_from_dwt<TILE>(buf.dwt_buf);
+        std::array<float, 16> features = extract_features_from_dwt_optimized<TILE>(buf.dwt_buf);
         volatile float dummy = features[0];
         (void)dummy;
     }, REPEATS);
-    std::cout << "Full pipeline (measured once): " << total_full << " ms\n";
 
-    // ----- Проценты -----
-    std::cout << "\nPercentages:\n";
-    std::cout << "rgb_to_gray:       " << (t1 / total_measured) * 100 << "%\n";
-    std::cout << "mirror_pad:        " << (t2 / total_measured) * 100 << "%\n";
-    std::cout << "gauss_h:           " << (t3 / total_measured) * 100 << "%\n";
-    std::cout << "gauss_v:           " << (t4 / total_measured) * 100 << "%\n";
-    std::cout << "std::copy:         " << (t5 / total_measured) * 100 << "%\n";
-    std::cout << "dwt_2d_haar:       " << (t6_clean / total_measured) * 100 << "%\n";
-    std::cout << "extract_features:  " << (t7 / total_measured) * 100 << "%\n";
+    // Вывод
+    double total = t_gray + t_pad + t_h + t_v + t_copy + t_dwt_clean + t_features;
+    std::cout << "Этап                     Время (μs)    Доля\n";
+    std::cout << "------------------------------------------------\n";
+    auto print = [&](const char* name, double t) {
+        std::cout << std::setw(25) << name << std::setw(15) << t * 1000 << std::setw(10) << (t/total)*100 << "%\n";
+    };
+    print("RGB->Gray", t_gray);
+    print("mirror_pad", t_pad);
+    print("gauss_h", t_h);
+    print("gauss_v", t_v);
+    print("std::copy", t_copy);
+    print("dwt_2d_haar (clean)", t_dwt_clean);
+    print("extract_features", t_features);
+    std::cout << "------------------------------------------------\n";
+    print("Сумма частей", total);
+    print("Полный pipeline (замер)", t_full);
 
     return 0;
 }
