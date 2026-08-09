@@ -33,8 +33,8 @@ template<int N, int M, int BLOCK = 8>
 void transpose_block(const float* __restrict src, float* __restrict dst) {
     for (int bi = 0; bi < N; bi += BLOCK) {
         for (int bj = 0; bj < M; bj += BLOCK) {
-            int max_i = std::min(bi + BLOCK, N);
-            int max_j = std::min(bj + BLOCK, M);
+            int max_i = bi + BLOCK;
+            int max_j = bj + BLOCK;
             for (int i = bi; i < max_i; ++i) {
                 #pragma omp simd
                 for (int j = bj; j < max_j; ++j) {
