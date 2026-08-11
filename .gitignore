@@ -14,3 +14,6 @@ benchmark_fine.cpp
 benchmark_fine.cpp
 bench_fine
 bench_new
+include/yolo/models/yolov8n.onnx
+include/yolo/models/yolov8n.pt
+third_party/onnxruntime-linux-x64-1.20.1/LICENSE
