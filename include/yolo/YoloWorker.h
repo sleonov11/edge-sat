@@ -18,4 +18,5 @@ class YoloWorker {
 public:
     YoloWorker(const std::string& model_path, TaskQueue<YoloTask>& queue);
     void run();
+    std::vector<float> preprocess (const YoloTask& task);
 };
