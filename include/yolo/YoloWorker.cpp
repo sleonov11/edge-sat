@@ -9,8 +9,9 @@ static Ort::SessionOptions MakeSessionOptions () {
     return opts;
 }
 
-YoloWorker::YoloWorker(const std::string& model_path, TaskQueue<YoloTask>& queue) :
+YoloWorker::YoloWorker(const std::string& model_path, TaskQueue<YoloTask>& queue, TaskQueue<DetectionResult>& result_queue) :
     queue_(queue),
+    result_queue_(result_queue),
     env_ (ORT_LOGGING_LEVEL_WARNING, "yolo"),
     session_(env_, model_path.c_str(), MakeSessionOptions()),
     memory_info_ (Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)),
@@ -87,18 +88,19 @@ void YoloWorker::run() {
         float scale_x = task->width / 640.0f;
         float scale_y = task->height / 640.0f;
 
+        DetectionResult result(*task);
         for (int idx : indices) {
-            auto& box = boxes[idx];
-            int x = static_cast<int>(box.x * scale_x) + task->offset_x;
-            int y = static_cast<int>(box.y * scale_y) + task->offset_y;
-            int w = static_cast<int>(box.width * scale_x);
-            int h = static_cast<int>(box.height * scale_y);
+            YoloBox box;
+            box.x = static_cast<int>(boxes[idx].x * scale_x) + task->offset_x;
+            box.y = static_cast<int>(boxes[idx].y * scale_y) + task->offset_y;
+            box.w = static_cast<int>(boxes[idx].width * scale_x);
+            box.h = static_cast<int>(boxes[idx].height * scale_y);
+            box.class_id = class_ids[idx];
+            box.conf = scores[idx];
             
-            std::cout << "Frame " << task->frame_id 
-                    << " class=" << class_ids[idx]
-                    << " conf=" << scores[idx]
-                    << " box=[" << x << "," << y << "," << w << "," << h << "]\n";
+            result.boxes.push_back(box);
         }
+        result_queue_.push(std::move(result));
     }
 }
 

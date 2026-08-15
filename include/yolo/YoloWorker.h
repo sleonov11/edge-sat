@@ -6,8 +6,24 @@
 #include <string>
 #include <vector>
 
+struct YoloBox {
+    int x, y, w, h;
+    int class_id;
+    float conf;
+};
+
+struct DetectionResult {
+    int frame_id;
+    int offset_x, offset_y;
+    std::vector<YoloBox> boxes;
+
+    explicit DetectionResult (const YoloTask& task)
+        : frame_id(task.frame_id), offset_x(task.offset_x), offset_y(task.offset_y) {}
+};
+
 class YoloWorker {
     TaskQueue<YoloTask>& queue_; // ссылка тк очередь общая.
+    TaskQueue<DetectionResult>& result_queue_;
     Ort::Env env_;
     Ort::Session session_;
     Ort::MemoryInfo memory_info_;
@@ -16,7 +32,7 @@ class YoloWorker {
     float nms_threshold_ = 0.45f;
 
 public:
-    YoloWorker(const std::string& model_path, TaskQueue<YoloTask>& queue);
+    YoloWorker(const std::string& model_path, TaskQueue<YoloTask>& queue, TaskQueue<DetectionResult>& result_queue);
     void run();
     std::vector<float> preprocess (const YoloTask& task);
 };

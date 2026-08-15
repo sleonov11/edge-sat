@@ -1,7 +1,7 @@
 #include <cmath>
 
 template <int N>
-void dwt_1d_haar(const float* __restrict src, float* __restrict dst) {
+inline void dwt_1d_haar(const float* __restrict src, float* __restrict dst) {
     constexpr float INV_SQRT2 = 1.0f / std::sqrt(2.0f);
     constexpr int HALF = N / 2;
 
