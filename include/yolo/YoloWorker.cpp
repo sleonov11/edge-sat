@@ -43,6 +43,62 @@ void YoloWorker::run() {
             input_names, &input_tensor, 1,
             output_names, 1
         );
+
+        float* data = outputs[0].GetTensorMutableData<float>();
+        const int num_classes = 80;
+        const int num_boxes = 8400;
+
+        std::vector<cv::Rect> boxes;
+        std::vector<float> scores;
+        std::vector<int> class_ids;
+
+        for (int i = 0; i < num_boxes; ++i) {
+            // Координаты центра и размеры (относительно 640×640)
+            float x = data[0 * num_boxes + i];
+            float y = data[1 * num_boxes + i];
+            float w = data[2 * num_boxes + i];  
+            float h = data[3 * num_boxes + i];
+            // ищем максимум среди всех классов
+            float max_score = 0.0f;
+            int class_id = -1;
+            for (int c = 0; c < num_classes; ++c) {
+                float score = data[(4 + c)*num_boxes + i];
+                if (score > max_score) {
+                    max_score = score;
+                    class_id = c;
+                }
+            }
+
+            if (max_score > conf_threshold_) {
+                int x1 = static_cast<int>(x - w/2);
+                int y1 = static_cast<int>(y - h/2);
+                int x2 = static_cast<int>(w);
+                int y2 = static_cast<int>(h);
+
+                boxes.push_back(cv::Rect(x1, y1, x2, y2));
+                scores.push_back(max_score);
+                class_ids.push_back(class_id);
+            }
+        }
+
+        std::vector<int> indices;
+        cv::dnn::NMSBoxes(boxes, scores, conf_threshold_, nms_threshold_, indices);
+
+        float scale_x = task->width / 640.0f;
+        float scale_y = task->height / 640.0f;
+
+        for (int idx : indices) {
+            auto& box = boxes[idx];
+            int x = static_cast<int>(box.x * scale_x) + task->offset_x;
+            int y = static_cast<int>(box.y * scale_y) + task->offset_y;
+            int w = static_cast<int>(box.width * scale_x);
+            int h = static_cast<int>(box.height * scale_y);
+            
+            std::cout << "Frame " << task->frame_id 
+                    << " class=" << class_ids[idx]
+                    << " conf=" << scores[idx]
+                    << " box=[" << x << "," << y << "," << w << "," << h << "]\n";
+        }
     }
 }
 
