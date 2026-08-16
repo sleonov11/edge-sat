@@ -46,7 +46,7 @@ void YoloWorker::run() {
         );
 
         float* data = outputs[0].GetTensorMutableData<float>();
-        const int num_classes = 80;
+        const int num_classes = 10;
         const int num_boxes = 8400;
 
         std::vector<cv::Rect> boxes;

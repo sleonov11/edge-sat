@@ -16,3 +16,5 @@ bench_fine
 bench_new
 include/yolo/models/yolov8n.onnx
 include/yolo/models/yolov8n.pt
+include/yolo/models/best.onnx
+include/yolo/models/best.pt
