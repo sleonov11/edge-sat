@@ -19,7 +19,7 @@
 
 // ---------- Константы ----------
 constexpr int TILE = 128;
-constexpr int OVERLAP = 64;
+constexpr int OVERLAP = 16;
 constexpr float SIGMA = 1.5f;
 
 // ---------- Обработка одного тайла ----------
@@ -52,7 +52,7 @@ int main(int argc, char** argv) {
     }
 
     std::string image_path = argv[1];
-    std::string model_path = (argc >= 3) ? argv[2] : "include/yolo/models/best.onnx";
+    std::string model_path = (argc >= 3) ? argv[2] : "include/yolo/models/ships_yolo11l.onnx";
     std::string output_path = (argc >= 4) ? argv[3] : "output.bmp";
 
     // Загружаем изображение (BGR)
@@ -116,8 +116,11 @@ int main(int argc, char** argv) {
 
             int ctx_x = cx - ctx_size / 2;
             int ctx_y = cy - ctx_size / 2;
-
-            // Ограничиваем координаты границами изображения
+            // Проверяем, что изображение достаточно велико
+            if (frame.cols < ctx_size || frame.rows < ctx_size) {
+                // Пропускаем тайл, если картинка меньше 640 (или можно масштабировать целиком)
+                continue;
+            }
             ctx_x = std::max(0, std::min(ctx_x, frame.cols - ctx_size));
             ctx_y = std::max(0, std::min(ctx_y, frame.rows - ctx_size));
 

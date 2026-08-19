@@ -16,12 +16,12 @@ YoloWorker::YoloWorker(const std::string& model_path, TaskQueue<YoloTask>& queue
     session_(env_, model_path.c_str(), MakeSessionOptions()),
     memory_info_ (Ort::MemoryInfo::CreateCpu(OrtArenaAllocator, OrtMemTypeDefault)),
     input_shape_{1,3,640,640},
-    conf_threshold_(0.25f),
+    conf_threshold_(0.6f),
     nms_threshold_(0.45f)
 {
 
 }
-
+/*
 void YoloWorker::run() {
     while (true) {
         auto task = queue_.pop();
@@ -79,6 +79,77 @@ void YoloWorker::run() {
                 boxes.push_back(cv::Rect(x1, y1, x2, y2));
                 scores.push_back(max_score);
                 class_ids.push_back(class_id);
+            }
+        }
+
+        std::vector<int> indices;
+        cv::dnn::NMSBoxes(boxes, scores, conf_threshold_, nms_threshold_, indices);
+
+        float scale_x = task->width / 640.0f;
+        float scale_y = task->height / 640.0f;
+
+        DetectionResult result(*task);
+        for (int idx : indices) {
+            YoloBox box;
+            box.x = static_cast<int>(boxes[idx].x * scale_x) + task->offset_x;
+            box.y = static_cast<int>(boxes[idx].y * scale_y) + task->offset_y;
+            box.w = static_cast<int>(boxes[idx].width * scale_x);
+            box.h = static_cast<int>(boxes[idx].height * scale_y);
+            box.class_id = class_ids[idx];
+            box.conf = scores[idx];
+            
+            result.boxes.push_back(box);
+        }
+        result_queue_.push(std::move(result));
+    }
+}*/
+
+void YoloWorker::run() {
+    while (true) {
+        auto task = queue_.pop();
+        if (!task) break;
+
+        auto input = preprocess(*task);
+        Ort::Value input_tensor = Ort::Value::CreateTensor<float>(
+            memory_info_,
+            input.data(),
+            input.size(),
+            input_shape_.data(),
+            input_shape_.size()
+        );
+
+        const char* input_names[] = {"images"};
+        const char* output_names[] = {"output0"};
+
+        auto outputs = session_.Run(
+            Ort::RunOptions{nullptr},
+            input_names, &input_tensor, 1,
+            output_names, 1
+        );
+
+        float* data = outputs[0].GetTensorMutableData<float>();
+        const int num_classes = 1;
+        const int num_boxes = 8400;
+
+        std::vector<cv::Rect> boxes;
+        std::vector<float> scores;
+        std::vector<int> class_ids;
+
+        for (int i = 0; i < num_boxes; ++i) {
+            float x = data[0 * num_boxes + i];
+            float y = data[1 * num_boxes + i];
+            float w = data[2 * num_boxes + i];  
+            float h = data[3 * num_boxes + i];
+            // Для модели с одним классом уверенность берём из канала 4 (objectness)
+            float score = data[4 * num_boxes + i]; 
+            if (score > conf_threshold_) {
+                int x1 = static_cast<int>(x - w/2);
+                int y1 = static_cast<int>(y - h/2);
+                int x2 = static_cast<int>(w);
+                int y2 = static_cast<int>(h);
+                boxes.push_back(cv::Rect(x1, y1, x2, y2));
+                scores.push_back(score);
+                class_ids.push_back(0); // единственный класс
             }
         }
 

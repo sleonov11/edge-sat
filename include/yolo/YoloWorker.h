@@ -28,7 +28,7 @@ class YoloWorker {
     Ort::Session session_;
     Ort::MemoryInfo memory_info_;
     std::vector<int64_t> input_shape_ = {1, 3, 640, 640};
-    float conf_threshold_ = 0.25f;
+    float conf_threshold_ = 0.6f;
     float nms_threshold_ = 0.45f;
 
 public:
