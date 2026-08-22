@@ -34,3 +34,9 @@ main_with_cnn_profiled.cpp
 data/abc.py
 data/water_classifier.onnx.data
 include/classifier/water_classifier.onnx
+data/features.csv
+data/labels.csv
+data/val.py
+data/explore_features.py
+data/count.py
+data/train_classifier.py
