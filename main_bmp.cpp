@@ -16,6 +16,7 @@
 #include <thread>
 #include <chrono>
 #include <vector>
+#include <omp.h>
 
 // ---------- Константы ----------
 constexpr int TILE = 128;
@@ -90,51 +91,64 @@ int main(int argc, char** argv) {
     GaussKernel<2> kernel(SIGMA);
     DecisionTree classifier;
 
+    // Сначала собираем все тайлы в вектор
     TileGenerator gen(gray.data, gray.step,
                       gray.cols, gray.rows,
                       TILE, TILE, OVERLAP);
 
+    std::vector<TileView> views;
     TileView view;
-    int tile_count = 0, positive_count = 0;
+    while (gen.next(view)) {
+        views.push_back(view);
+    }
+
+    int tile_count = 0;
+    int positive_count = 0;
 
     auto t0 = std::chrono::steady_clock::now();
 
-    while (gen.next(view)) {
-        ++tile_count;
+    // Параллельная обработка тайлов
+    #pragma omp parallel for schedule(dynamic) reduction(+:tile_count, positive_count)
+    for (size_t i = 0; i < views.size(); ++i) {
+        const TileView& v = views[i];
 
+        // Каждый поток создаёт свой буфер на стеке
         TileBuffers<TILE> buf;
         std::array<float, 16> features;
 
-        process_gray_tile<TILE>(view, buf, kernel, features);
+        process_gray_tile<TILE>(v, buf, kernel, features);
+
+        // Увеличиваем счётчик тайлов (reduction уже обеспечивает безопасность)
+        ++tile_count;
 
         if (classifier.classify_tile(features)) {
             ++positive_count;
 
             const int ctx_size = 640;
-            int cx = view.x + view.w / 2;
-            int cy = view.y + view.h / 2;
+            int cx = v.x + v.w / 2;
+            int cy = v.y + v.h / 2;
 
             int ctx_x = cx - ctx_size / 2;
             int ctx_y = cy - ctx_size / 2;
-            // Проверяем, что изображение достаточно велико
-            if (frame.cols < ctx_size || frame.rows < ctx_size) {
-                // Пропускаем тайл, если картинка меньше 640 (или можно масштабировать целиком)
-                continue;
-            }
-            ctx_x = std::max(0, std::min(ctx_x, frame.cols - ctx_size));
-            ctx_y = std::max(0, std::min(ctx_y, frame.rows - ctx_size));
 
-            YoloTask task(
-                0,
-                ctx_x, ctx_y,           // Смещение теперь для КОНТЕКСТА
-                ctx_size, ctx_size,     // Размер 640x640
-                3,
-                frame.data,
-                static_cast<int>(frame.step),
-                frame.cols,
-                frame.rows
-            );
-            task_queue.push(std::move(task));
+            // Проверяем, что изображение достаточно велико
+            if (frame.cols >= ctx_size && frame.rows >= ctx_size) {
+                ctx_x = std::max(0, std::min(ctx_x, frame.cols - ctx_size));
+                ctx_y = std::max(0, std::min(ctx_y, frame.rows - ctx_size));
+
+                YoloTask task(
+                    0,
+                    ctx_x, ctx_y,
+                    ctx_size, ctx_size,
+                    3,
+                    frame.data,
+                    static_cast<int>(frame.step),
+                    frame.cols,
+                    frame.rows
+                );
+                // Отправка в очередь потокобезопасна
+                task_queue.push(std::move(task));
+            }
         }
     }
 
@@ -160,31 +174,33 @@ int main(int argc, char** argv) {
         }
     }
     std::cout << "Total detections: " << all_boxes.size() << "\n";
+
     std::vector<cv::Rect> rects;
     std::vector<float> confs;
     std::vector<int> class_ids;
+    std::vector<YoloBox> filtered_boxes;  
+
     for (const auto& box : all_boxes) {
-        // Фильтр: отбрасываем слишком мелкий шум (например, < 20 пикселей)
-        if (box.w < 20 || box.h < 20) continue; 
-        // Отбрасываем слишком большие (если это шум на весь экран)
+        if (box.w < 20 || box.h < 20) continue;
         if (box.w > frame.cols * 0.9 && box.h > frame.rows * 0.9) continue;
 
         rects.push_back(cv::Rect(box.x, box.y, box.w, box.h));
         confs.push_back(box.conf);
         class_ids.push_back(box.class_id);
+        filtered_boxes.push_back(box);   
     }
 
     std::vector<int> indices;
-    // NMS порог 0.4 (меньше = меньше дублей)
     cv::dnn::NMSBoxes(rects, confs, 0.4f, 0.4f, indices);
-    // ---------- Рисуем ----------
-    cv::Mat output = frame.clone();
-    for (const auto& box : all_boxes) {
-        cv::rectangle(output,
-                      cv::Point(box.x, box.y),
-                      cv::Point(box.x + box.w, box.y + box.h),
-                      cv::Scalar(0, 255, 0), 2);
 
+    // ---------- Рисуем только прошедшие NMS ----------
+    cv::Mat output = frame.clone();
+    for (int idx : indices) {
+        const auto& box = filtered_boxes[idx];
+        cv::rectangle(output,
+                    cv::Point(box.x, box.y),
+                    cv::Point(box.x + box.w, box.y + box.h),
+                    cv::Scalar(0, 255, 0), 2);
         std::string label = "cls:" + std::to_string(box.class_id) +
                             " " + std::to_string(int(box.conf * 100)) + "%";
         cv::putText(output, label,
