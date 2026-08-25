@@ -4,7 +4,7 @@
 
 static Ort::SessionOptions MakeSessionOptions () {
     Ort::SessionOptions opts;
-    opts.SetIntraOpNumThreads(2);
+    opts.SetIntraOpNumThreads(8);
     opts.SetGraphOptimizationLevel(GraphOptimizationLevel::ORT_ENABLE_ALL);
     return opts;
 }
