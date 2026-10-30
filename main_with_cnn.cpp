@@ -1,5 +1,3 @@
-// ВЕРСИЯ CNN вместо gauss -> dwt -> decision tree;
-
 #include "include/core/TileBuffers.h"
 #include "include/core/TileGenerator.h"
 #include "include/classifier/TinyCNN.h"
@@ -81,7 +79,6 @@ int main(int argc, char** argv) {
             int ctx_x = cx - ctx_size / 2;
             int ctx_y = cy - ctx_size / 2;
 
-            // Проверяем, что изображение достаточно велико
             if (frame.cols >= ctx_size && frame.rows >= ctx_size) {
                 ctx_x = std::max(0, std::min(ctx_x, frame.cols - ctx_size));
                 ctx_y = std::max(0, std::min(ctx_y, frame.rows - ctx_size));
@@ -96,7 +93,6 @@ int main(int argc, char** argv) {
                     frame.cols,
                     frame.rows
                 );
-                // Отправка в очередь потокобезопасна
                 task_queue.push(std::move(task));
             }
         }
@@ -109,14 +105,12 @@ int main(int argc, char** argv) {
               << ", positive: " << positive_count
               << ", time: " << ms << " ms\n";
 
-    // ---------- Shutdown (порядок критичен) ----------
     task_queue.stop();
-    worker_thread.join();      // ждём, пока worker закончит все push
+    worker_thread.join();      
 
     result_queue.stop();
     result_thread.join();
 
-    // ---------- Объединяем боксы ----------
     std::vector<YoloBox> all_boxes;
     for (const auto& res : all_results) {
         for (const auto& box : res.boxes) {
@@ -143,7 +137,6 @@ int main(int argc, char** argv) {
     std::vector<int> indices;
     cv::dnn::NMSBoxes(rects, confs, 0.4f, 0.4f, indices);
 
-    // ---------- Рисуем только прошедшие NMS ----------
     cv::Mat output = frame.clone();
     for (int idx : indices) {
         const auto& box = filtered_boxes[idx];

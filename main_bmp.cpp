@@ -18,12 +18,10 @@
 #include <vector>
 #include <omp.h>
 
-// ---------- Константы ----------
 constexpr int TILE = 128;
 constexpr int OVERLAP = 16;
 constexpr float SIGMA = 1.5f;
 
-// ---------- Обработка одного тайла ----------
 template <int TILE>
 void process_gray_tile(const TileView& view, TileBuffers<TILE>& buf,
                        const GaussKernel<2>& kernel, std::array<float, 16>& features) {
@@ -45,7 +43,6 @@ void process_gray_tile(const TileView& view, TileBuffers<TILE>& buf,
     features = extract_features_from_dwt_optimized<TILE>(buf.dwt_buf);
 }
 
-// ---------- Главная функция ----------
 int main(int argc, char** argv) {
     if (argc < 2) {
         std::cerr << "Usage: " << argv[0] << " <image.bmp> [model.onnx] [output.bmp]\n";
@@ -56,7 +53,6 @@ int main(int argc, char** argv) {
     std::string model_path = (argc >= 3) ? argv[2] : "include/yolo/models/ships_yolo11l.onnx";
     std::string output_path = (argc >= 4) ? argv[3] : "output.bmp";
 
-    // Загружаем изображение (BGR)
     cv::Mat frame = cv::imread(image_path, cv::IMREAD_COLOR);
     if (frame.empty()) {
         std::cerr << "Cannot read image: " << image_path << "\n";
@@ -64,34 +60,28 @@ int main(int argc, char** argv) {
     }
     std::cout << "Image: " << frame.cols << "x" << frame.rows << "\n";
 
-    // Grayscale для классификатора
     cv::Mat gray;
     cv::cvtColor(frame, gray, cv::COLOR_BGR2GRAY);
 
-    // ---------- Очереди ----------
     TaskQueue<YoloTask> task_queue;
     TaskQueue<DetectionResult> result_queue;
 
-    // ---------- YOLO Worker ----------
     YoloWorker worker(model_path, task_queue, result_queue);
     std::thread worker_thread([&] { worker.run(); });
 
-    // ---------- Сбор результатов ----------
     std::vector<DetectionResult> all_results;
 
     std::thread result_thread([&] {
         while (true) {
             auto res = result_queue.pop();
-            if (!res) break;  // stop() вызван
+            if (!res) break;  
             all_results.push_back(std::move(*res));
         }
     });
 
-    // ---------- Пайплайн ----------
     GaussKernel<2> kernel(SIGMA);
     DecisionTree classifier;
 
-    // Сначала собираем все тайлы в вектор
     TileGenerator gen(gray.data, gray.step,
                       gray.cols, gray.rows,
                       TILE, TILE, OVERLAP);
@@ -107,18 +97,15 @@ int main(int argc, char** argv) {
 
     auto t0 = std::chrono::steady_clock::now();
 
-    // Параллельная обработка тайлов
     #pragma omp parallel for schedule(dynamic) reduction(+:tile_count, positive_count)
     for (size_t i = 0; i < views.size(); ++i) {
         const TileView& v = views[i];
 
-        // Каждый поток создаёт свой буфер на стеке
         TileBuffers<TILE> buf;
         std::array<float, 16> features;
 
         process_gray_tile<TILE>(v, buf, kernel, features);
 
-        // Увеличиваем счётчик тайлов (reduction уже обеспечивает безопасность)
         ++tile_count;
 
         if (classifier.classify_tile(features)) {
@@ -131,7 +118,6 @@ int main(int argc, char** argv) {
             int ctx_x = cx - ctx_size / 2;
             int ctx_y = cy - ctx_size / 2;
 
-            // Проверяем, что изображение достаточно велико
             if (frame.cols >= ctx_size && frame.rows >= ctx_size) {
                 ctx_x = std::max(0, std::min(ctx_x, frame.cols - ctx_size));
                 ctx_y = std::max(0, std::min(ctx_y, frame.rows - ctx_size));
@@ -146,7 +132,6 @@ int main(int argc, char** argv) {
                     frame.cols,
                     frame.rows
                 );
-                // Отправка в очередь потокобезопасна
                 task_queue.push(std::move(task));
             }
         }
@@ -159,14 +144,12 @@ int main(int argc, char** argv) {
               << ", positive: " << positive_count
               << ", time: " << ms << " ms\n";
 
-    // ---------- Shutdown (порядок критичен) ----------
     task_queue.stop();
-    worker_thread.join();      // ждём, пока worker закончит все push
+    worker_thread.join();      
 
     result_queue.stop();
     result_thread.join();
 
-    // ---------- Объединяем боксы ----------
     std::vector<YoloBox> all_boxes;
     for (const auto& res : all_results) {
         for (const auto& box : res.boxes) {
@@ -193,7 +176,6 @@ int main(int argc, char** argv) {
     std::vector<int> indices;
     cv::dnn::NMSBoxes(rects, confs, 0.4f, 0.4f, indices);
 
-    // ---------- Рисуем только прошедшие NMS ----------
     cv::Mat output = frame.clone();
     for (int idx : indices) {
         const auto& box = filtered_boxes[idx];
