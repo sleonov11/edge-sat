@@ -83,7 +83,7 @@ edge-sat/
 # OpenCV
 sudo dnf install opencv-devel    # или apt install libopencv-dev
 
-# ONNX Runtime (скачайте预编译ный пакет или соберите из исходников)
+# ONNX Runtime (скачайте пакет или соберите из исходников)
 # Например, распакуйте в third_party/onnxruntime
 ```
 
